@@ -1,0 +1,372 @@
+import React, { useState, useEffect } from 'react';
+import { FileText, Search, Filter, Download, Eye, Calendar, Building2 } from 'lucide-react';
+import { api } from '../../utils/api';
+import { Hospital, MedicalRecord } from '../../types';
+
+interface HospitalMedicalRecordsProps {
+ user: Hospital;
+ onBack: () => void;
+}
+
+export const HospitalMedicalRecordsArchive: React.FC<HospitalMedicalRecordsProps> = ({ user, onBack }) => {
+ const [records, setRecords] = useState<MedicalRecord[]>([]);
+ const [loading, setLoading] = useState(true);
+ const [searchTerm, setSearchTerm] = useState('');
+ const [filterDoctor, setFilterDoctor] = useState('');
+ const [filterDepartment, setFilterDepartment] = useState('');
+ const [dateRange, setDateRange] = useState({ start: '', end: '' });
+ const [selectedRecord, setSelectedRecord] = useState<MedicalRecord | null>(null);
+
+ useEffect(() => {
+ loadMedicalRecords();
+ }, [user.id]);
+
+ const loadMedicalRecords = async () => {
+ try {
+ const data = await api.hospitals.getMedicalRecords(user.id, user.role);
+ setRecords(data);
+ } catch (error) {
+ console.error('Error loading medical records:', error);
+ } finally {
+ setLoading(false);
+ }
+ };
+
+ const handleDownload = (record: MedicalRecord) => {
+ const content = `
+${user.name} - MEDICAL RECORD
+===============================
+Record ID: ${record.id}
+Patient ID: ${record.patientId}
+Doctor ID: ${record.doctorId}
+Date: ${new Date(record.createdAt).toLocaleDateString()}
+
+DIAGNOSIS: ${record.diagnosis}
+
+PRESCRIPTION: ${record.prescription}
+
+CLINICAL NOTES: ${record.notes}
+
+ATTACHMENTS: ${record.attachments.join(', ')}
+
+Hospital: ${user.name}
+Generated on: ${new Date().toLocaleDateString()}
+ `;
+ 
+ const blob = new Blob([content], { type: 'text/plain' });
+ const url = URL.createObjectURL(blob);
+ const a = document.createElement('a');
+ a.href = url;
+ a.download = `hospital-record-${record.id}.txt`;
+ document.body.appendChild(a);
+ a.click();
+ document.body.removeChild(a);
+ URL.revokeObjectURL(url);
+ };
+
+ const filteredRecords = records.filter(record => {
+ const matchesSearch = record.diagnosis.toLowerCase().includes(searchTerm.toLowerCase()) ||
+ record.prescription.toLowerCase().includes(searchTerm.toLowerCase()) ||
+ record.notes.toLowerCase().includes(searchTerm.toLowerCase()) ||
+ record.patientId.toLowerCase().includes(searchTerm.toLowerCase());
+ 
+ const matchesDoctor = !filterDoctor || record.doctorId === filterDoctor;
+ 
+ const recordDate = new Date(record.createdAt);
+ const matchesDateRange = (!dateRange.start || recordDate >= new Date(dateRange.start)) &&
+ (!dateRange.end || recordDate <= new Date(dateRange.end));
+ 
+ return matchesSearch && matchesDoctor && matchesDateRange;
+ });
+
+ const uniqueDoctors = [...new Set(records.map(r => r.doctorId))];
+ const departments = ['Cardiology', 'Orthopedics', 'Pulmonology', 'Emergency', 'Surgery'];
+
+ if (loading) {
+ return (
+ <div className="flex items-center justify-center h-64">
+ <div className="text-gray-500">Loading medical records archive...</div>
+ </div>
+ );
+ }
+
+ return (
+ <div className="p-6 space-y-6 bg-gray-50 min-h-full">
+ <div className="flex items-center justify-between">
+ <div>
+ <h1 className="text-2xl font-bold text-gray-900">Medical Records Archive</h1>
+ <p className="text-gray-500">Hospital-wide medical records management</p>
+ </div>
+ <button
+ onClick={onBack}
+ className="text-purple-600 hover:text-purple-600 font-medium"
+ >
+ Back to Dashboard
+ </button>
+ </div>
+
+ {/* Search and Filters */}
+ <div className="bg-white p-6 rounded-xl border border-gray-200 ">
+ <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+ <div className="relative">
+ <Search className="absolute left-3 top-3 w-4 h-4 text-gray-500" />
+ <input
+ type="text"
+ placeholder="Search records..."
+ value={searchTerm}
+ onChange={(e) => setSearchTerm(e.target.value)}
+ className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+ />
+ </div>
+ 
+ <div className="relative">
+ <Filter className="absolute left-3 top-3 w-4 h-4 text-gray-500" />
+ <select
+ value={filterDoctor}
+ onChange={(e) => setFilterDoctor(e.target.value)}
+ className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+ >
+ <option value="">All Doctors</option>
+ {uniqueDoctors.map(doctorId => (
+ <option key={doctorId} value={doctorId}>Dr. {doctorId}</option>
+ ))}
+ </select>
+ </div>
+ 
+ <div>
+ <select
+ value={filterDepartment}
+ onChange={(e) => setFilterDepartment(e.target.value)}
+ className="bg-gray-100 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+ >
+ <option value="">All Departments</option>
+ {departments.map(dept => (
+ <option key={dept} value={dept}>{dept}</option>
+ ))}
+ </select>
+ </div>
+ 
+ <div>
+ <input
+ type="date"
+ placeholder="Start Date"
+ value={dateRange.start}
+ onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+ className="bg-gray-100 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+ />
+ </div>
+ 
+ <div>
+ <input
+ type="date"
+ placeholder="End Date"
+ value={dateRange.end}
+ onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+ className="bg-gray-100 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+ />
+ </div>
+ </div>
+ </div>
+
+ <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+ {/* Records List */}
+ <div className="bg-white rounded-xl border border-gray-200 ">
+ <div className="p-6 border-b border-gray-200">
+ <h2 className="text-lg font-semibold text-gray-900">
+ Medical Records ({filteredRecords.length})
+ </h2>
+ </div>
+ <div className="p-6 max-h-96 overflow-y-auto">
+ {filteredRecords.length === 0 ? (
+ <div className="text-center py-8">
+ <FileText className="w-12 h-12 text-gray-500 mx-auto mb-4" />
+ <h3 className="text-lg font-medium text-gray-900 mb-2">No Records Found</h3>
+ <p className="text-gray-500">No medical records match your search criteria.</p>
+ </div>
+ ) : (
+ <div className="space-y-4">
+ {filteredRecords.map((record) => (
+ <div
+ key={record.id}
+ className={`p-4 rounded-lg cursor-pointer transition-colors ${
+ selectedRecord?.id === record.id
+ ? 'bg-purple-100 border-2 border-purple-500'
+ : 'bg-gray-50 hover:bg-gray-100'
+ }`}
+ onClick={() => setSelectedRecord(record)}
+ >
+ <div className="flex items-start justify-between">
+ <div className="flex items-start space-x-3">
+ <div className="p-2 bg-purple-100 text-purple-600 rounded-full">
+ <FileText className="w-4 h-4" />
+ </div>
+ <div className="flex-1">
+ <h3 className="font-medium text-gray-900">{record.diagnosis}</h3>
+ <p className="text-sm text-gray-500">Patient: {record.patientId}</p>
+ <p className="text-sm text-gray-500">Doctor: {record.doctorId}</p>
+ <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
+ <div className="flex items-center space-x-1">
+ <Calendar className="w-3 h-3" />
+ <span>{new Date(record.createdAt).toLocaleDateString()}</span>
+ </div>
+ <div className="flex items-center space-x-1">
+ <FileText className="w-3 h-3" />
+ <span>{record.attachments.length} files</span>
+ </div>
+ </div>
+ </div>
+ </div>
+ <div className="flex space-x-1">
+ <button
+ onClick={(e) => {
+ e.stopPropagation();
+ setSelectedRecord(record);
+ }}
+ className="text-purple-600 hover:text-purple-600 p-1"
+ title="View Details"
+ >
+ <Eye className="w-4 h-4" />
+ </button>
+ <button
+ onClick={(e) => {
+ e.stopPropagation();
+ handleDownload(record);
+ }}
+ className="text-blue-600 hover:text-blue-600 p-1"
+ title="Download Record"
+ >
+ <Download className="w-4 h-4" />
+ </button>
+ </div>
+ </div>
+ </div>
+ ))}
+ </div>
+ )}
+ </div>
+ </div>
+
+ {/* Record Details */}
+ <div className="bg-white rounded-xl border border-gray-200 ">
+ <div className="p-6 border-b border-gray-200">
+ <h2 className="text-lg font-semibold text-gray-900">Record Details</h2>
+ </div>
+ <div className="p-6 bg-gray-50 min-h-full">
+ {selectedRecord ? (
+ <div className="space-y-6">
+ <div className="bg-purple-50 p-4 rounded-lg">
+ <h3 className="font-medium text-purple-900 mb-2">Record Information</h3>
+ <div className="grid grid-cols-2 gap-4 text-sm">
+ <div>
+ <p><strong>Record ID:</strong> {selectedRecord.id}</p>
+ <p><strong>Patient ID:</strong> {selectedRecord.patientId}</p>
+ </div>
+ <div>
+ <p><strong>Doctor ID:</strong> {selectedRecord.doctorId}</p>
+ <p><strong>Date:</strong> {new Date(selectedRecord.createdAt).toLocaleDateString()}</p>
+ </div>
+ </div>
+ </div>
+
+ <div>
+ <label className="block text-sm font-medium text-gray-600 mb-2">
+ <Building2 className="w-4 h-4 inline mr-1" />
+ Diagnosis
+ </label>
+ <p className="text-gray-900 bg-gray-50 p-3 rounded-lg">{selectedRecord.diagnosis}</p>
+ </div>
+
+ <div>
+ <label className="block text-sm font-medium text-gray-600 mb-2">
+ Treatment & Prescription
+ </label>
+ <p className="text-gray-900 bg-gray-50 p-3 rounded-lg">{selectedRecord.prescription}</p>
+ </div>
+
+ <div>
+ <label className="block text-sm font-medium text-gray-600 mb-2">
+ Clinical Notes
+ </label>
+ <p className="text-gray-900 bg-gray-50 p-3 rounded-lg">{selectedRecord.notes}</p>
+ </div>
+
+ {selectedRecord.attachments.length > 0 && (
+ <div>
+ <label className="block text-sm font-medium text-gray-600 mb-2">
+ Medical Documents
+ </label>
+ <div className="space-y-2">
+ {selectedRecord.attachments.map((attachment, index) => (
+ <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+ <div className="flex items-center space-x-2">
+ <FileText className="w-4 h-4 text-gray-500" />
+ <span className="text-sm text-gray-600">{attachment}</span>
+ </div>
+ <button className="text-blue-600 hover:text-blue-600 text-sm font-medium">
+ View
+ </button>
+ </div>
+ ))}
+ </div>
+ </div>
+ )}
+
+ <div className="pt-4 space-y-2">
+ <button
+ onClick={() => handleDownload(selectedRecord)}
+ className="w-full bg-purple-600 text-gray-900 py-2 px-4 rounded-lg hover:bg-purple-700 flex items-center justify-center space-x-2"
+ >
+ <Download className="w-4 h-4" />
+ <span>Download Record</span>
+ </button>
+ <button className="w-full bg-blue-600 text-gray-900 py-2 px-4 rounded-lg hover:bg-blue-700">
+ Share with Doctor
+ </button>
+ </div>
+ </div>
+ ) : (
+ <div className="text-center py-8 text-gray-500">
+ Select a record to view details
+ </div>
+ )}
+ </div>
+ </div>
+ </div>
+
+ {/* Archive Statistics */}
+ <div className="bg-white rounded-xl border border-gray-200 ">
+ <div className="p-6 border-b border-gray-200">
+ <h2 className="text-lg font-semibold text-gray-900">Archive Overview</h2>
+ </div>
+ <div className="p-6 bg-gray-50 min-h-full">
+ <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+ <div className="text-center">
+ <p className="text-2xl font-bold text-purple-600">{records.length}</p>
+ <p className="text-sm text-gray-500">Total Records</p>
+ </div>
+ <div className="text-center">
+ <p className="text-2xl font-bold text-blue-600">{new Set(records.map(r => r.patientId)).size}</p>
+ <p className="text-sm text-gray-500">Patients</p>
+ </div>
+ <div className="text-center">
+ <p className="text-2xl font-bold text-green-600">{uniqueDoctors.length}</p>
+ <p className="text-sm text-gray-500">Doctors</p>
+ </div>
+ <div className="text-center">
+ <p className="text-2xl font-bold text-orange-600">
+ {records.reduce((sum, r) => sum + r.attachments.length, 0)}
+ </p>
+ <p className="text-sm text-gray-500">Documents</p>
+ </div>
+ <div className="text-center">
+ <p className="text-2xl font-bold text-red-600">
+ {records.filter(r => new Date(r.createdAt) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)).length}
+ </p>
+ <p className="text-sm text-gray-500">Last 30 Days</p>
+ </div>
+ </div>
+ </div>
+ </div>
+ </div>
+ );
+};
