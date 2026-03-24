@@ -18,9 +18,9 @@ services:
       - key: PORT
         value: 10000
 
-# The PostgreSQL database
-databases:
-  - name: qhc-db
-    plan: free
-    databaseName: quantum_health_chain
-    user: postgres
+# The PostgreSQL database 
+databases: 
+  - name: qhc-db 
+    plan: free 
+    databaseName: quantum_health_chain 
+    user: qhc_user
