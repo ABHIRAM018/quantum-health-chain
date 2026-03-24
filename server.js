@@ -38,12 +38,21 @@ app.use(cors({
 app.get('/api/ping', (_req, res) => res.json({ status: 'ok', db: 'quantum_health_chain' }));
 
 // ─── PostgreSQL connection pool ───────────────────────────────
+const poolConfig = process.env.DATABASE_URL
+  ? {
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false }, // Common for hosted DBs
+    }
+  : {
+      host:     process.env.DB_HOST     || 'localhost',
+      port:     parseInt(process.env.DB_PORT || '5432'),
+      database: process.env.DB_NAME     || 'quantum_health_chain',
+      user:     process.env.DB_USER     || 'postgres',
+      password: String(process.env.DB_PASSWORD || ''),
+    };
+
 const pool = new Pool({
-  host:     process.env.DB_HOST     || 'localhost',
-  port:     parseInt(process.env.DB_PORT || '5432'),
-  database: process.env.DB_NAME     || 'quantum_health_chain',
-  user:     process.env.DB_USER     || 'postgres',
-  password: String(process.env.DB_PASSWORD || ''),
+  ...poolConfig,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
@@ -1813,6 +1822,21 @@ app.use((err, req, res, _next) => {
   console.error('Unhandled error:', err.message);
   res.status(500).json({ error: 'Internal server error' });
 });
+
+// ─── Static files (production only) ───────────────────────────
+import path from 'path';
+import { fileURLToPath } from 'url';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, 'dist')));
+  app.get('*', (req, res) => {
+    if (!req.path.startsWith('/api/')) {
+      res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+    }
+  });
+}
 
 // ─── Start ────────────────────────────────────────────────────
 const PORT = process.env.PORT || 4000;
